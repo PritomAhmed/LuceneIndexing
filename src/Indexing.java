@@ -6,38 +6,44 @@ import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.*;
 import org.apache.lucene.queryparser.classic.QueryParser;
-import org.apache.lucene.search.*;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 
-
 import java.io.*;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.ParseException;
-import java.util.Iterator;
 
 /**
  * Created by pritom on 4/21/2015.
  */
 public class Indexing {
-    public static final String FILES_TO_INDEX_DIRECTORY = "E:\\GitHub\\LuceneIndexing\\input";
+//    public static final String FILES_TO_INDEX_DIRECTORY = "E:\\GitHub\\LuceneIndexing\\input";
+    public static final String FILES_TO_INDEX_DIRECTORY = "E:\\GitHub\\WebCrawler\\output";
     public static final String INDEX_DIRECTORY = "E:\\GitHub\\LuceneIndexing\\indexDirectory";
 
     public static final String FIELD_PATH = "E:\\GitHub\\LuceneIndexing";
     public static final String FIELD_CONTENTS = "contents";
 
     public static void main(String[] args) throws Exception {
-        constructIndex();
-        searchLuceneIndex("edu");
-        searchLuceneIndex("California");
-//        createIndex();
-//        Searching.searchIndex("california");
-//        Searching.searchIndex("education");
+        int count = 0;
+        while (count < 500000) {
+            count +=5000;
+            long startTime = System.currentTimeMillis();
+            constructIndex(count);
+            long endTime = System.currentTimeMillis();
+            long totalTime = endTime - startTime;
+            System.out.println("Total Time taken : " + totalTime + " for " + count + " files");
+        }
+//        searchLuceneIndex("edu");
+//        searchLuceneIndex("California");
     }
 
     /*public static void createIndex() throws IOException {
@@ -58,7 +64,7 @@ public class Indexing {
         indexWriter.close();
     }*/
 
-    public static void constructIndex() throws URISyntaxException, IOException {
+    public static void constructIndex(int fileCount) throws URISyntaxException, IOException {
         boolean create = true;
         Directory dir = FSDirectory.open(new File(INDEX_DIRECTORY).toPath());
         Analyzer analyzer = new StandardAnalyzer();
@@ -73,8 +79,14 @@ public class Indexing {
         IndexWriter writer = new IndexWriter(dir, iwc);
         Path docDir = Paths.get(FILES_TO_INDEX_DIRECTORY);
         File[] files = docDir.toFile().listFiles();
-        for (File file : files) {
-            indexDocs(writer, file.toPath());
+        if (files != null) {
+            for (File file : files) {
+                indexDocs(writer, file.toPath());
+                if (fileCount == 0) {
+                    break;
+                }
+                fileCount--;
+            }
         }
 
         writer.close();
@@ -83,12 +95,48 @@ public class Indexing {
     public static void indexDocs(IndexWriter writer, Path file) throws IOException {
         try (InputStream stream = Files.newInputStream(file)) {
             Document doc = new Document();
-            Field filePath = new StringField("path", file.toString(),
-                    Field.Store.YES);
+            Field filePath = new StringField("path", file.toString(), Field.Store.YES);
             doc.add(filePath);
-            String title = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8)).readLine();
-            doc.add(new TextField("contents", new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))));
+            BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
+            String title = bufferedReader.readLine();
+            String metaDescription = bufferedReader.readLine();
+            if (metaDescription != null && metaDescription.startsWith("Description : ")) {
+                metaDescription = metaDescription.substring(14);
+//                System.out.println(metaDescription);
+            } else {
+                metaDescription = "";
+            }
+
+            String url = bufferedReader.readLine();
+            if (url != null && url.startsWith("URL : ")) {
+                url = url.substring(6);
+            } else {
+                url = "";
+            }
+
+            StringBuilder linksBuilder = new StringBuilder();
+            String linkStart = bufferedReader.readLine();
+            String link = "";
+            if (linkStart != null && linkStart.startsWith("Links : ")) {
+                link = bufferedReader.readLine();
+                while (!link.startsWith("Text : ")) {
+                    linksBuilder.append(link);
+                    link = bufferedReader.readLine();
+                }
+            }
+
+            StringBuilder textBuilder = new StringBuilder();
+            String s;
+            while ((s=bufferedReader.readLine())!=null) {
+                textBuilder.append(s);
+            }
+
+//            doc.add(new TextField("contents", new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))));
+            doc.add(new TextField("contents", textBuilder.toString(), Field.Store.NO));
             doc.add(new StringField("title", title == null ? "" : title, Field.Store.YES));
+            doc.add(new StringField("metaDescription", metaDescription, Field.Store.YES));
+            doc.add(new StringField("url", url, Field.Store.YES));
+            doc.add(new TextField("links", linksBuilder.toString(), Field.Store.NO));
             if (writer.getConfig().getOpenMode() == IndexWriterConfig.OpenMode.CREATE) {
                 writer.addDocument(doc);
             } else {
@@ -131,14 +179,15 @@ public class Indexing {
         TopDocs results = searcher.search(query, 100);
         ScoreDoc[] hits = results.scoreDocs;
 
-        System.out.println(results.totalHits + "total matching documents");
+        System.out.println(results.totalHits + " total matching documents");
         for (ScoreDoc hit : hits) {
             Document doc = searcher.doc(hit.doc);
             String path = doc.get("path");
+            String url = doc.get("url");
             String title = doc.get("title");
-            System.out.println("path " + path + " title " + title);
+            String metaDescription = doc.get("metaDescription");
+            System.out.println("url " + url + " title " + title + " meta description " + metaDescription);
         }
-
         reader.close();
     }
 
