@@ -25,46 +25,31 @@ import java.text.ParseException;
  * Created by pritom on 4/21/2015.
  */
 public class Indexing {
-//    public static final String FILES_TO_INDEX_DIRECTORY = "E:\\GitHub\\LuceneIndexing\\input";
-    public static final String FILES_TO_INDEX_DIRECTORY = "E:\\GitHub\\WebCrawler\\output";
-    public static final String INDEX_DIRECTORY = "E:\\GitHub\\LuceneIndexing\\indexDirectory";
-
-    public static final String FIELD_PATH = "E:\\GitHub\\LuceneIndexing";
-    public static final String FIELD_CONTENTS = "contents";
+    public static String FILES_TO_BE_INDEXED_DIRECTORY = "E:\\GitHub\\result";
+    public static String INDEX_DIRECTORY = "E:\\GitHub\\LuceneIndexing\\indexDirectory";
 
     public static void main(String[] args) throws Exception {
-        int count = 0;
-        while (count < 500000) {
-            count +=5000;
-            long startTime = System.currentTimeMillis();
-            constructIndex(count);
-            long endTime = System.currentTimeMillis();
-            long totalTime = endTime - startTime;
-            System.out.println("Total Time taken : " + totalTime + " for " + count + " files");
-        }
-//        searchLuceneIndex("edu");
-//        searchLuceneIndex("California");
+//        FILES_TO_BE_INDEXED_DIRECTORY = args[0];
+//        INDEX_DIRECTORY = args[1];
+        //int count = 200000;
+//        while (count < 400000) {
+//            count +=5000;
+        long startTime = System.currentTimeMillis();
+//        constructIndex(count);
+//        int count = constructIndex();
+        searchLuceneIndex("Kazi");
+        long endTime = System.currentTimeMillis();
+        long totalTime = endTime - startTime;
+//            System.out.println("Total Time taken : " + totalTime + " for " + count + " files");
+
+//        System.out.println(totalTime + " " + count);
+        System.out.println(totalTime);
+//        }
     }
 
-    /*public static void createIndex() throws IOException {
-        Analyzer analyzer = new StandardAnalyzer();
-        boolean recreateIndexIfExists = true;
-        IndexWriter indexWriter = new IndexWriter(INDEX_DIRECTORY, analyzer, recreateIndexIfExists);
-        File dir = new File(FILES_TO_INDEX_DIRECTORY);
-        File[] files = dir.listFiles();
-        for (File file : files) {
-            Document document = new Document();
-            String path = file.getCanonicalPath();
-            document.add(new Field(FIELD_PATH, path, Field.Store.YES, Field.Index.UN_TOKENIZED));
-            Reader reader = new FileReader(file);
-            document.add(new Field(FIELD_CONTENTS, reader));
-            indexWriter.addDocument(document);
-        }
-        indexWriter.optimize();
-        indexWriter.close();
-    }*/
-
-    public static void constructIndex(int fileCount) throws URISyntaxException, IOException {
+//    public static void constructIndex(int fileCount) throws URISyntaxException, IOException {
+    public static int constructIndex() throws URISyntaxException, IOException {
+        int count = 0;
         boolean create = true;
         Directory dir = FSDirectory.open(new File(INDEX_DIRECTORY).toPath());
         Analyzer analyzer = new StandardAnalyzer();
@@ -77,19 +62,21 @@ public class Indexing {
         }
 
         IndexWriter writer = new IndexWriter(dir, iwc);
-        Path docDir = Paths.get(FILES_TO_INDEX_DIRECTORY);
+        Path docDir = Paths.get(FILES_TO_BE_INDEXED_DIRECTORY);
         File[] files = docDir.toFile().listFiles();
         if (files != null) {
             for (File file : files) {
                 indexDocs(writer, file.toPath());
-                if (fileCount == 0) {
-                    break;
-                }
-                fileCount--;
+                count++;
+//                if (fileCount == 0) {
+//                    break;
+//                }
+//                fileCount--;
             }
         }
 
         writer.close();
+        return count;
     }
 
     public static void indexDocs(IndexWriter writer, Path file) throws IOException {
@@ -126,17 +113,23 @@ public class Indexing {
             }
 
             StringBuilder textBuilder = new StringBuilder();
+            if (link.startsWith("Text : ")) {
+                textBuilder.append(link.substring(6));
+            }
             String s;
-            while ((s=bufferedReader.readLine())!=null) {
+            while ((s = bufferedReader.readLine()) != null) {
                 textBuilder.append(s);
             }
 
 //            doc.add(new TextField("contents", new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))));
-            doc.add(new TextField("contents", textBuilder.toString(), Field.Store.NO));
-            doc.add(new StringField("title", title == null ? "" : title, Field.Store.YES));
-            doc.add(new StringField("metaDescription", metaDescription, Field.Store.YES));
+            TextField contentField = new TextField("contents", textBuilder.toString(), Field.Store.NO);
+            contentField.setBoost(3);
+            doc.add(contentField);
+
+            doc.add(new TextField("title", title == null ? "" : title, Field.Store.YES));
+            doc.add(new TextField("metaDescription", metaDescription, Field.Store.NO));
             doc.add(new StringField("url", url, Field.Store.YES));
-            doc.add(new TextField("links", linksBuilder.toString(), Field.Store.NO));
+            //doc.add(new TextField("links", linksBuilder.toString(), Field.Store.NO));
             if (writer.getConfig().getOpenMode() == IndexWriterConfig.OpenMode.CREATE) {
                 writer.addDocument(doc);
             } else {
@@ -146,43 +139,23 @@ public class Indexing {
         }
     }
 
-   /* public static void searchIndex(String searchString) throws ParseException, IOException {
-        System.out.println("Searching for '" + searchString + "'");
-        Directory directory = FSDirectory.getDirectory(INDEX_DIRECTORY);
-        IndexReader indexReader = IndexReader.open(directory);
-        IndexSearcher indexSearcher = new IndexSearcher(indexReader);
-        Analyzer analyzer = new StandardAnalyzer();
-        QueryParser queryParser = new QueryParser(FIELD_CONTENTS, analyzer);
-        Query query = queryParser.parse(searchString);
-        Hits hits = indexSearcher.search(query);
-        System.out.println("Number of hits: " + hits.length());
-        Iterator<Hit> it = hits.iterator();
-        while (it.hasNext()) {
-            Hit hit = it.next();
-            Document document = hit.getDocument();
-            String path = document.get(FIELD_PATH);
-            System.out.println("Hit: " + path);
-        }
-    }*/
-
     public static void searchLuceneIndex(String searchQuery) throws IOException, ParseException, org.apache.lucene.queryparser.classic.ParseException {
-        String index = "E:\\GitHub\\LuceneIndexing\\indexDirectory";
         String field = "contents";
 
-        IndexReader reader = DirectoryReader.open(FSDirectory.open(Paths.get(index)));
+        IndexReader reader = DirectoryReader.open(FSDirectory.open(Paths.get(INDEX_DIRECTORY)));
         IndexSearcher searcher = new IndexSearcher(reader);
         Analyzer analyzer = new StandardAnalyzer();
 
         QueryParser parser = new QueryParser(field, analyzer);
         Query query = parser.parse(searchQuery);
 
-        TopDocs results = searcher.search(query, 100);
+        TopDocs results = searcher.search(query, 10);
         ScoreDoc[] hits = results.scoreDocs;
 
         System.out.println(results.totalHits + " total matching documents");
         for (ScoreDoc hit : hits) {
             Document doc = searcher.doc(hit.doc);
-            String path = doc.get("path");
+//            String path = doc.get("path");
             String url = doc.get("url");
             String title = doc.get("title");
             String metaDescription = doc.get("metaDescription");
@@ -190,6 +163,8 @@ public class Indexing {
         }
         reader.close();
     }
+
+
 
 
 }

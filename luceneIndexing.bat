@@ -1,0 +1,1 @@
+java -jar LuceneIndexing.jar %1 %2
